@@ -152,6 +152,7 @@ namespace FargateCdkStack.Constructs
                     SecurityGroups = new ISecurityGroup[] { sg },
                     ServiceName = "service-ecs-profiling-dotnet-demo",
                 });
+
             return service;
         }
 
@@ -160,6 +161,15 @@ namespace FargateCdkStack.Constructs
             ApplicationListener monitorListener,
             FargateService service)
         {
+
+
+            var target1 = service.LoadBalancerTarget(new LoadBalancerTargetOptions
+            {
+                ContainerPort = 80,
+                Protocol = Amazon.CDK.AWS.ECS.Protocol.TCP,
+                ContainerName = "container-app"
+            });
+
             var targetGroup = new ApplicationTargetGroup(this,
                 "tg-app-ecs-profiling-dotnet-demo",
                 new ApplicationTargetGroupProps
@@ -168,6 +178,7 @@ namespace FargateCdkStack.Constructs
                     Vpc = vpc,
                     TargetType = TargetType.IP,
                     ProtocolVersion = ApplicationProtocolVersion.HTTP1,
+                    
                     HealthCheck = new HealthCheck
                     {
                         Protocol = Amazon.CDK.AWS.ElasticLoadBalancingV2.Protocol.HTTP,
@@ -180,8 +191,16 @@ namespace FargateCdkStack.Constructs
                         HealthyHttpCodes = "200"
                     },
                     Port = 80,
-                    Targets = new IApplicationLoadBalancerTarget[] { service }
+                    Targets = new IApplicationLoadBalancerTarget[] { target1 }
                 });
+
+
+            var target2 = service.LoadBalancerTarget(new LoadBalancerTargetOptions
+            {
+                ContainerPort = 52323,
+                Protocol = Amazon.CDK.AWS.ECS.Protocol.TCP,
+                ContainerName = "dotnet-monitor"
+            });
 
             var monitorGroup = new ApplicationTargetGroup(this,
                 "tg-monitor-ecs-profiling-dotnet-demo",
@@ -204,7 +223,7 @@ namespace FargateCdkStack.Constructs
                         HealthyHttpCodes = "200"
                     },
                     Port = 52323,
-                    Targets = new IApplicationLoadBalancerTarget[] { service }
+                    Targets = new IApplicationLoadBalancerTarget[] { target2 }
                 });
 
             httpListener.AddTargetGroups(
