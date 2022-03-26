@@ -1,4 +1,5 @@
-﻿using Amazon.CDK;
+﻿using System.Collections.Generic;
+using Amazon.CDK;
 using Amazon.CDK.AWS.EC2;
 using Amazon.CDK.AWS.ECS;
 using Amazon.CDK.AWS.ElasticLoadBalancingV2;
@@ -10,7 +11,6 @@ namespace FargateCdkStack.Constructs
 {
     public class EcsServiceConstruct : Construct
     {
-        private ApplicationTargetGroup TargetGroup { get; set; }
         private FargateService FargateService { get; set; }
 
         public EcsServiceConstruct(Construct scope,
@@ -18,12 +18,13 @@ namespace FargateCdkStack.Constructs
             Vpc vpc,
             Cluster cluster,
             ApplicationLoadBalancer alb,
-            ApplicationListener albListener)
+            ApplicationListener httpListener,
+            ApplicationListener monitorListener)
             : base(scope, id)
         {
             var task = CreateTaskDefinition();
             FargateService = CreateEcsService(vpc, cluster, alb, task);
-            CreateTargetGroup(vpc, albListener, FargateService);
+            CreateTargetGroup(vpc, httpListener, monitorListener, FargateService);
         }
 
         private FargateTaskDefinition CreateTaskDefinition()
@@ -33,10 +34,15 @@ namespace FargateCdkStack.Constructs
                 "task-definition-ecs-profiling-dotnet-demo",
                 new FargateTaskDefinitionProps
                 {
-                    Cpu = 512,
+                    Cpu = 1024,
                     Family = "task-definition-ecs-profiling-dotnet-demo",
-                    MemoryLimitMiB = 1024
+                    MemoryLimitMiB = 2048
                 });
+
+            task.AddVolume(new Amazon.CDK.AWS.ECS.Volume
+            {
+                Name = "profiling"
+            });
 
             task.AddContainer("container-app",
                 new ContainerDefinitionOptions
@@ -44,20 +50,60 @@ namespace FargateCdkStack.Constructs
                     Cpu = 512,
                     MemoryLimitMiB = 1024,
                     Image = ContainerImage.FromAsset("../src/Profiling.Api"),
+                    Environment = new Dictionary<string, string>
+                    {
+                        {"DOTNET_DiagnosticPorts","/tmp/dotnet-monitor-pipe,nosuspend,connect"}
+                    },
                     Logging = LogDriver.AwsLogs(new AwsLogDriverProps
                     {
                         StreamPrefix = "ecs"
                     }),
-                }).AddPortMappings(new PortMapping
+                    PortMappings = new IPortMapping[]
+                    {
+                        new PortMapping
+                        {
+                            ContainerPort = 80
+                        }
+                    }
+                }).AddMountPoints(new MountPoint
+            {
+                ContainerPath = "/tmp",
+                SourceVolume = "profiling"
+            });
+
+            task.AddContainer("dotnet-monitor",
+                new ContainerDefinitionOptions
                 {
-                    ContainerPort = 80,
-                });
+                    Cpu = 256,
+                    MemoryLimitMiB = 512,
+                    Image = ContainerImage.FromRegistry("mcr.microsoft.com/dotnet/monitor:6"),
+                    Environment = new Dictionary<string, string>
+                    {
+                        { "DOTNETMONITOR_DiagnosticPort__ConnectionMode", "Listen" },
+                        { "DOTNETMONITOR_DiagnosticPort__EndpointName", "/tmp/dotnet-monitor-pipe" },
+                        { "DOTNETMONITOR_Urls", "http://+:52323" }
+
+                    },
+                    Command = new[] { "--no-auth" },
+                    PortMappings = new IPortMapping[]
+                    {
+                        new PortMapping
+                        {
+                            ContainerPort = 52323
+                        }
+                    }
+
+                }).AddMountPoints(new MountPoint
+            {
+                ContainerPath = "/tmp",
+                SourceVolume = "profiling"
+            });
 
             return task;
         }
 
-        private FargateService CreateEcsService(Vpc vpc, 
-            Cluster cluster, 
+        private FargateService CreateEcsService(Vpc vpc,
+            Cluster cluster,
             ApplicationLoadBalancer alb,
             FargateTaskDefinition task)
         {
@@ -80,6 +126,14 @@ namespace FargateCdkStack.Constructs
                 StringRepresentation = string.Empty
             }));
 
+            sg.Connections.AllowFrom(alb.Connections, new Port(new PortProps
+            {
+                FromPort = 52323,
+                ToPort = 52323,
+                Protocol = Protocol.TCP,
+                StringRepresentation = string.Empty
+            }));
+
 
             var service = new FargateService(this,
                 "service-ecs-profiling-dotnet-demo",
@@ -96,20 +150,21 @@ namespace FargateCdkStack.Constructs
                         Subnets = vpc.PublicSubnets
                     },
                     SecurityGroups = new ISecurityGroup[] { sg },
-                    ServiceName = "service-ecs-profiling-dotnet-demo"
+                    ServiceName = "service-ecs-profiling-dotnet-demo",
                 });
             return service;
         }
 
-        private void CreateTargetGroup(Vpc vpc, 
-            ApplicationListener albListener,
+        private void CreateTargetGroup(Vpc vpc,
+            ApplicationListener httpListener,
+            ApplicationListener monitorListener,
             FargateService service)
         {
-            TargetGroup = new ApplicationTargetGroup(this,
-                "tg-ecs-profiling-dotnet-demo",
+            var targetGroup = new ApplicationTargetGroup(this,
+                "tg-app-ecs-profiling-dotnet-demo",
                 new ApplicationTargetGroupProps
                 {
-                    TargetGroupName = "tg-ecs-profiling-dotnet-demo",
+                    TargetGroupName = "tg-app-profiling-dotnet-demo",
                     Vpc = vpc,
                     TargetType = TargetType.IP,
                     ProtocolVersion = ApplicationProtocolVersion.HTTP1,
@@ -128,14 +183,42 @@ namespace FargateCdkStack.Constructs
                     Targets = new IApplicationLoadBalancerTarget[] { service }
                 });
 
+            var monitorGroup = new ApplicationTargetGroup(this,
+                "tg-monitor-ecs-profiling-dotnet-demo",
+                new ApplicationTargetGroupProps
+                {
+                    TargetGroupName = "tg-mon-profiling-dotnet-demo",
+                    Vpc = vpc,
+                    TargetType = TargetType.IP,
+                    ProtocolVersion = ApplicationProtocolVersion.HTTP1,
+                    Protocol = ApplicationProtocol.HTTP,
+                    HealthCheck = new HealthCheck
+                    {
+                        Protocol = Amazon.CDK.AWS.ElasticLoadBalancingV2.Protocol.HTTP,
+                        HealthyThresholdCount = 3,
+                        Path = "/info",
+                        Port = "52323",
+                        Interval = Duration.Millis(10000),
+                        Timeout = Duration.Millis(8000),
+                        UnhealthyThresholdCount = 10,
+                        HealthyHttpCodes = "200"
+                    },
+                    Port = 52323,
+                    Targets = new IApplicationLoadBalancerTarget[] { service }
+                });
 
-            albListener.AddTargetGroups(
-                "listener",
+            httpListener.AddTargetGroups(
+                "app-listener",
                 new AddApplicationTargetGroupsProps
                 {
-                    TargetGroups = new IApplicationTargetGroup[] { TargetGroup },
-                    Conditions = new[] { ListenerCondition.PathPatterns(new[] { "/app/*" }) },
-                    Priority = 1
+                    TargetGroups = new IApplicationTargetGroup[] { targetGroup }
+                });
+                
+            monitorListener.AddTargetGroups(
+                "monitor-listener",
+                new AddApplicationTargetGroupsProps
+                {
+                    TargetGroups = new IApplicationTargetGroup[] { monitorGroup }
                 });
 
         }

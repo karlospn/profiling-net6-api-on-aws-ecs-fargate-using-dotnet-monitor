@@ -27,7 +27,8 @@ namespace FargateCdkStack.Stacks
                 vpc.Vpc,
                 fg.Cluster,
                 alb.Alb,
-                alb.HttpListener);
+                alb.HttpListener,
+                alb.MonitorListener);
         }
     }
 }

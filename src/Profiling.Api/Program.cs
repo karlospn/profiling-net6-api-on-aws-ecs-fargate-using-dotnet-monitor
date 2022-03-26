@@ -18,8 +18,6 @@ var app = builder.Build();
 
 app.UseSwagger();
 
-app.UsePathBase("/app");
-
 app.UseSwaggerUI();
 
 app.UseRouting();
