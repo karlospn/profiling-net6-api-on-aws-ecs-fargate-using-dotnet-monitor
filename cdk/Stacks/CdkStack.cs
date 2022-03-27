@@ -18,17 +18,27 @@ namespace FargateCdkStack.Stacks
                 "aws-fargate-profiling-dotnet-demo-cluster-construct", 
                 vpc.Vpc);
 
-            var alb = new PublicLoadBalancerConstruct(this,
+            var publicAlb = new PublicLoadBalancerConstruct(this,
                 "aws-fargate-profiling-dotnet-demo-public-alb-construct",
                 vpc.Vpc);
 
-            _ = new EcsServiceConstruct(this,
+            var monitorAlb = new MonitorLoadBalancerConstruct(this,
+                "aws-fargate-profiling-dotnet-demo-monitor-alb-construct",
+                vpc.Vpc);
+
+            var service = new EcsServiceConstruct(this,
                 "aws-fargate-profiling-dotnet-demo-ecs-service-construct",
                 vpc.Vpc,
                 fg.Cluster,
-                alb.Alb,
-                alb.HttpListener,
-                alb.MonitorListener);
+                publicAlb.Alb,
+                monitorAlb.Alb);
+
+            _ = new TargetGroupConstruct(this,
+                "aws-fargate-profiling-dotnet-demo-target-groups",
+                vpc.Vpc,
+                publicAlb.Alb,
+                monitorAlb.Alb,
+                service.FargateService);
         }
     }
 }

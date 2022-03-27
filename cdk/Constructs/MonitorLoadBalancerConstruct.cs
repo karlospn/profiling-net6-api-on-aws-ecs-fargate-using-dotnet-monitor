@@ -4,31 +4,31 @@ using Constructs;
 
 namespace FargateCdkStack.Constructs
 {
-    public class PublicLoadBalancerConstruct : Construct
+    public class MonitorLoadBalancerConstruct : Construct
     {
         public ApplicationLoadBalancer Alb { get; }
 
-        public PublicLoadBalancerConstruct(Construct scope,
+        public MonitorLoadBalancerConstruct(Construct scope,
             string id,
             Vpc vpc)
             : base(scope, id)
         {
             var securityGroup = new SecurityGroup(this,
-                "scg-pub-alb-ecs-profiling-dotnet-demo",
+                "scg-mon-alb-ecs-profiling-dotnet-demo",
                 new SecurityGroupProps()
                 {
                     Vpc = vpc,
                     AllowAllOutbound = true,
-                    Description = "Security group for the public ALB",
-                    SecurityGroupName = "scg-pub-alb-ecs-profiling-dotnet-demo"
+                    Description = "Security group for the monitor ALB",
+                    SecurityGroupName = "scg-mon-alb-ecs-profiling-dotnet-demo"
                 });
 
             securityGroup.AddIngressRule(Peer.AnyIpv4(),
-                Port.Tcp(80),
-                "Allow port 80 ingress traffic");
+                Port.Tcp(52323),
+                "Allow port 52323 ingress traffic");
 
             Alb = new ApplicationLoadBalancer(this,
-                "alb-pub-ecs-profiling-dotnet-demo",
+                "alb-mon-ecs-profiling-dotnet-demo",
                 new ApplicationLoadBalancerProps
                 {
                     InternetFacing = true,
@@ -39,11 +39,12 @@ namespace FargateCdkStack.Constructs
                         SubnetType = SubnetType.PUBLIC,
                     },
                     SecurityGroup = securityGroup,
-                    LoadBalancerName = "alb-pub-ecs-prf-dotnet-demo"
+                    LoadBalancerName = "alb-mon-ecs-prf-dotnet-demo"
                 });
 
-            _ = Alb.AddListener("alb-http-listener", new ApplicationListenerProps
+            _ = Alb.AddListener("alb-monitor-listener", new ApplicationListenerProps
             {
+                Port = 52323,
                 Protocol = ApplicationProtocol.HTTP,
                 LoadBalancer = Alb,
                 DefaultAction = ListenerAction.FixedResponse(500),

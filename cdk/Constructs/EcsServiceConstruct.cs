@@ -1,30 +1,26 @@
 ﻿using System.Collections.Generic;
-using Amazon.CDK;
 using Amazon.CDK.AWS.EC2;
 using Amazon.CDK.AWS.ECS;
 using Amazon.CDK.AWS.ElasticLoadBalancingV2;
 using Constructs;
-using HealthCheck = Amazon.CDK.AWS.ElasticLoadBalancingV2.HealthCheck;
 using Protocol = Amazon.CDK.AWS.EC2.Protocol;
 
 namespace FargateCdkStack.Constructs
 {
     public class EcsServiceConstruct : Construct
     {
-        private FargateService FargateService { get; set; }
+        public FargateService FargateService { get; }
 
         public EcsServiceConstruct(Construct scope,
             string id,
             Vpc vpc,
             Cluster cluster,
-            ApplicationLoadBalancer alb,
-            ApplicationListener httpListener,
-            ApplicationListener monitorListener)
+            ApplicationLoadBalancer pubAlb,
+            ApplicationLoadBalancer monAlb)
             : base(scope, id)
         {
             var task = CreateTaskDefinition();
-            FargateService = CreateEcsService(vpc, cluster, alb, task);
-            CreateTargetGroup(vpc, httpListener, monitorListener, FargateService);
+            FargateService = CreateEcsService(vpc, cluster, pubAlb, monAlb, task);
         }
 
         private FargateTaskDefinition CreateTaskDefinition()
@@ -104,10 +100,11 @@ namespace FargateCdkStack.Constructs
 
         private FargateService CreateEcsService(Vpc vpc,
             Cluster cluster,
-            ApplicationLoadBalancer alb,
+            ApplicationLoadBalancer pubAlb,
+            ApplicationLoadBalancer monAlb,
             FargateTaskDefinition task)
         {
-
+            
             var sg = new SecurityGroup(this,
                 "scg-svc-ecs-profiling-dotnet-demo",
                 new SecurityGroupProps
@@ -118,7 +115,7 @@ namespace FargateCdkStack.Constructs
                     Vpc = vpc
                 });
 
-            sg.Connections.AllowFrom(alb.Connections, new Port(new PortProps
+            sg.Connections.AllowFrom(pubAlb.Connections, new Port(new PortProps
             {
                 FromPort = 80,
                 ToPort = 80,
@@ -126,7 +123,7 @@ namespace FargateCdkStack.Constructs
                 StringRepresentation = string.Empty
             }));
 
-            sg.Connections.AllowFrom(alb.Connections, new Port(new PortProps
+            sg.Connections.AllowFrom(monAlb.Connections, new Port(new PortProps
             {
                 FromPort = 52323,
                 ToPort = 52323,
@@ -155,92 +152,5 @@ namespace FargateCdkStack.Constructs
 
             return service;
         }
-
-        private void CreateTargetGroup(Vpc vpc,
-            ApplicationListener httpListener,
-            ApplicationListener monitorListener,
-            FargateService service)
-        {
-
-
-            var target1 = service.LoadBalancerTarget(new LoadBalancerTargetOptions
-            {
-                ContainerPort = 80,
-                Protocol = Amazon.CDK.AWS.ECS.Protocol.TCP,
-                ContainerName = "container-app"
-            });
-
-            var targetGroup = new ApplicationTargetGroup(this,
-                "tg-app-ecs-profiling-dotnet-demo",
-                new ApplicationTargetGroupProps
-                {
-                    TargetGroupName = "tg-app-profiling-dotnet-demo",
-                    Vpc = vpc,
-                    TargetType = TargetType.IP,
-                    ProtocolVersion = ApplicationProtocolVersion.HTTP1,
-                    
-                    HealthCheck = new HealthCheck
-                    {
-                        Protocol = Amazon.CDK.AWS.ElasticLoadBalancingV2.Protocol.HTTP,
-                        HealthyThresholdCount = 3,
-                        Path = "/health",
-                        Port = "80",
-                        Interval = Duration.Millis(10000),
-                        Timeout = Duration.Millis(8000),
-                        UnhealthyThresholdCount = 10,
-                        HealthyHttpCodes = "200"
-                    },
-                    Port = 80,
-                    Targets = new IApplicationLoadBalancerTarget[] { target1 }
-                });
-
-
-            var target2 = service.LoadBalancerTarget(new LoadBalancerTargetOptions
-            {
-                ContainerPort = 52323,
-                Protocol = Amazon.CDK.AWS.ECS.Protocol.TCP,
-                ContainerName = "dotnet-monitor"
-            });
-
-            var monitorGroup = new ApplicationTargetGroup(this,
-                "tg-monitor-ecs-profiling-dotnet-demo",
-                new ApplicationTargetGroupProps
-                {
-                    TargetGroupName = "tg-mon-profiling-dotnet-demo",
-                    Vpc = vpc,
-                    TargetType = TargetType.IP,
-                    ProtocolVersion = ApplicationProtocolVersion.HTTP1,
-                    Protocol = ApplicationProtocol.HTTP,
-                    HealthCheck = new HealthCheck
-                    {
-                        Protocol = Amazon.CDK.AWS.ElasticLoadBalancingV2.Protocol.HTTP,
-                        HealthyThresholdCount = 3,
-                        Path = "/info",
-                        Port = "52323",
-                        Interval = Duration.Millis(10000),
-                        Timeout = Duration.Millis(8000),
-                        UnhealthyThresholdCount = 10,
-                        HealthyHttpCodes = "200"
-                    },
-                    Port = 52323,
-                    Targets = new IApplicationLoadBalancerTarget[] { target2 }
-                });
-
-            httpListener.AddTargetGroups(
-                "app-listener",
-                new AddApplicationTargetGroupsProps
-                {
-                    TargetGroups = new IApplicationTargetGroup[] { targetGroup }
-                });
-                
-            monitorListener.AddTargetGroups(
-                "monitor-listener",
-                new AddApplicationTargetGroupsProps
-                {
-                    TargetGroups = new IApplicationTargetGroup[] { monitorGroup }
-                });
-
-        }
-
     }
 }
