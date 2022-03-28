@@ -7,11 +7,11 @@ using Protocol = Amazon.CDK.AWS.EC2.Protocol;
 
 namespace FargateCdkStack.Constructs
 {
-    public class EcsServiceConstruct : Construct
+    public class EcsApplicationServiceConstruct : Construct
     {
         public FargateService FargateService { get; }
 
-        public EcsServiceConstruct(Construct scope,
+        public EcsApplicationServiceConstruct(Construct scope,
             string id,
             Vpc vpc,
             Cluster cluster,

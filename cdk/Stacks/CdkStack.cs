@@ -26,11 +26,23 @@ namespace FargateCdkStack.Stacks
                 "aws-fargate-profiling-dotnet-demo-monitor-alb-construct",
                 vpc.Vpc);
 
-            var service = new EcsServiceConstruct(this,
+            var appService = new EcsApplicationServiceConstruct(this,
                 "aws-fargate-profiling-dotnet-demo-ecs-service-construct",
                 vpc.Vpc,
                 fg.Cluster,
                 publicAlb.Alb,
+                monitorAlb.Alb);
+
+            var promService = new EcsPrometheusServiceConstruct(this,
+                "aws-fargate-profiling-dotnet-demo-prom-service-construct",
+                vpc.Vpc,
+                fg.Cluster,
+                monitorAlb.Alb);
+
+            var grafService = new EcsGrafanaServiceConstruct(this,
+                "aws-fargate-profiling-dotnet-demo-graf-service-construct",
+                vpc.Vpc,
+                fg.Cluster,
                 monitorAlb.Alb);
 
             _ = new TargetGroupConstruct(this,
@@ -38,7 +50,9 @@ namespace FargateCdkStack.Stacks
                 vpc.Vpc,
                 publicAlb.Alb,
                 monitorAlb.Alb,
-                service.FargateService);
+                appService.FargateService,
+                promService.FargateService,
+                grafService.FargateService);
         }
     }
 }

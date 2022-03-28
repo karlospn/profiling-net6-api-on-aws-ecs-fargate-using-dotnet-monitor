@@ -9,6 +9,12 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "cdk", "cdk", "{7670203A-39E
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Profiling.Api", "src\Profiling.Api\Profiling.Api.csproj", "{F7560A90-D0C8-4774-87CF-B754C85B5F78}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "prometheus", "prometheus", "{E6951C22-1134-4E9F-BA15-F08F0FDD485B}"
+	ProjectSection(SolutionItems) = preProject
+		prometheus\Dockerfile = prometheus\Dockerfile
+		prometheus\prometheus.yml = prometheus\prometheus.yml
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

@@ -27,6 +27,10 @@ namespace FargateCdkStack.Constructs
                 Port.Tcp(52323),
                 "Allow port 52323 ingress traffic");
 
+            securityGroup.AddIngressRule(Peer.AnyIpv4(),
+                Port.Tcp(9090),
+                "Allow port 9090 ingress traffic");
+
             Alb = new ApplicationLoadBalancer(this,
                 "alb-mon-ecs-profiling-dotnet-demo",
                 new ApplicationLoadBalancerProps
@@ -45,6 +49,22 @@ namespace FargateCdkStack.Constructs
             _ = Alb.AddListener("alb-monitor-listener", new ApplicationListenerProps
             {
                 Port = 52323,
+                Protocol = ApplicationProtocol.HTTP,
+                LoadBalancer = Alb,
+                DefaultAction = ListenerAction.FixedResponse(500),
+            });
+
+            _ = Alb.AddListener("alb-prom-listener", new ApplicationListenerProps
+            {
+                Port = 9090,
+                Protocol = ApplicationProtocol.HTTP,
+                LoadBalancer = Alb,
+                DefaultAction = ListenerAction.FixedResponse(500),
+            });
+
+            _ = Alb.AddListener("alb-grafana-listener", new ApplicationListenerProps
+            {
+                Port = 3000,
                 Protocol = ApplicationProtocol.HTTP,
                 LoadBalancer = Alb,
                 DefaultAction = ListenerAction.FixedResponse(500),
