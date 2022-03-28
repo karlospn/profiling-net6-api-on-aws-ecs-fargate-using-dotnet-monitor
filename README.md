@@ -2,12 +2,12 @@
 
 This repository contains a practical example about how to deploy an application with ``dotnet-monitor`` as a sidecar container on AWS ECS Fargate.
 
-The repository contains an app and a CDK app that creates the AWS Resources needed to run the demo.
+The repository contains a .NET6 API and a CDK app that creates the AWS Resources needed to run the demo.
 
-# Requirements
+# Dependencies
 
-- Docker  
-The app is containerized and deployed into ECR within the CDK app. When you executen the ``cdk deploy`` command the app container is going to be created, so you'll need docker installed on your machine.
+- _Docker installed on your machine._   
+The API is containerized and pushed into ECR with the CDK app. When the ``cdk deploy`` command is executed the app container is created, so you'll need docker installed on your machine.
 
 # AWS Resources
 
@@ -18,10 +18,10 @@ The CDK app will create the following resources:
 - VPC.
 - 2 Public Subnets.
 - A public Application Load Balancer that listens on port 80 (I didn't want to set an SSL certificate...).  
-  - This ALB is used to access the app-container API. 
+  - This ALB is used to access the NET6 Web API. 
 - A public Application Load Balancer that listens on port 52323
-  - This one is used to access the dotnet-monitor (you could use a single ALB and set 2 listeners with 2 target groups, but in a more realistic scenario you don't want to open a port in a public ALB, instead you'll create a secondary internal ALB and use it to access the dotnet-monitor API).
-- An ECS Task Definition with 2 containers: app container + dotnet-monitor container
+  - This one is used to interact with ``dotnet-monitor`` (you could use a single ALB and set 2 listeners with 2 target groups, but in a realistic scenario you really don't want to open a port on your internet facing ALB, instead you'll create a secondary internal ALB and use it to interact with the ``dotnet-monitor`` API).
+- An ECS Task Definition with 2 containers: API container + dotnet-monitor container.
 
 
 
