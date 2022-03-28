@@ -19,11 +19,11 @@ namespace FargateCdkStack.Constructs
             ApplicationLoadBalancer monAlb)
             : base(scope, id)
         {
-            var task = CreateTaskDefinition(vpc);
+            var task = CreateTaskDefinition();
             FargateService = CreateEcsService(vpc, cluster, pubAlb, monAlb, task);
         }
 
-        private FargateTaskDefinition CreateTaskDefinition(Vpc vpc)
+        private FargateTaskDefinition CreateTaskDefinition()
         {
             var task = new FargateTaskDefinition(this,
                 "task-definition-ecs-profiling-dotnet-demo",
