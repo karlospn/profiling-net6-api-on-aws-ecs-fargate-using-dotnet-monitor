@@ -19,13 +19,12 @@ namespace FargateCdkStack.Constructs
             ApplicationLoadBalancer monAlb)
             : base(scope, id)
         {
-            var task = CreateTaskDefinition();
+            var task = CreateTaskDefinition(vpc);
             FargateService = CreateEcsService(vpc, cluster, pubAlb, monAlb, task);
         }
 
-        private FargateTaskDefinition CreateTaskDefinition()
+        private FargateTaskDefinition CreateTaskDefinition(Vpc vpc)
         {
-
             var task = new FargateTaskDefinition(this,
                 "task-definition-ecs-profiling-dotnet-demo",
                 new FargateTaskDefinitionProps
@@ -37,8 +36,16 @@ namespace FargateCdkStack.Constructs
 
             task.AddVolume(new Amazon.CDK.AWS.ECS.Volume
             {
-                Name = "profiling"
+                Name = "diagnostics"
             });
+
+            task.AddVolume(new Amazon.CDK.AWS.ECS.Volume
+            {
+                Name = "dumps"
+            });
+
+            var linuxParams = new LinuxParameters(this, "sys-ptrace-linux-params");
+            linuxParams.AddCapabilities(Capability.SYS_PTRACE);
 
             task.AddContainer("container-app",
                 new ContainerDefinitionOptions
@@ -46,9 +53,10 @@ namespace FargateCdkStack.Constructs
                     Cpu = 512,
                     MemoryLimitMiB = 1024,
                     Image = ContainerImage.FromAsset("../src/Profiling.Api"),
+                    LinuxParameters = linuxParams,
                     Environment = new Dictionary<string, string>
                     {
-                        {"DOTNET_DiagnosticPorts","/tmp/dotnet-monitor-pipe,nosuspend,connect"}
+                        {"DOTNET_DiagnosticPorts","/diag/port,nosuspend,connect"}
                     },
                     Logging = LogDriver.AwsLogs(new AwsLogDriverProps
                     {
@@ -63,8 +71,13 @@ namespace FargateCdkStack.Constructs
                     }
                 }).AddMountPoints(new MountPoint
             {
-                ContainerPath = "/tmp",
-                SourceVolume = "profiling"
+                ContainerPath = "/diag",
+                SourceVolume = "diagnostics"
+            }, new MountPoint
+            {
+                ContainerPath = "/dumps",
+                SourceVolume = "dumps",
+                ReadOnly = false
             });
 
             task.AddContainer("dotnet-monitor",
@@ -76,9 +89,9 @@ namespace FargateCdkStack.Constructs
                     Environment = new Dictionary<string, string>
                     {
                         { "DOTNETMONITOR_DiagnosticPort__ConnectionMode", "Listen" },
-                        { "DOTNETMONITOR_DiagnosticPort__EndpointName", "/tmp/dotnet-monitor-pipe" },
-                        { "DOTNETMONITOR_Urls", "http://+:52323" }
-
+                        { "DOTNETMONITOR_DiagnosticPort__EndpointName", "/diag/port" },
+                        { "DOTNETMONITOR_Urls", "http://+:52323" },
+                        { "DOTNETMONITOR_Storage__DumpTempFolder", "/dumps"}
                     },
                     Command = new[] { "--no-auth" },
                     PortMappings = new IPortMapping[]
@@ -91,8 +104,13 @@ namespace FargateCdkStack.Constructs
 
                 }).AddMountPoints(new MountPoint
             {
-                ContainerPath = "/tmp",
-                SourceVolume = "profiling"
+                ContainerPath = "/diag",
+                SourceVolume = "diagnostics"
+            }, new MountPoint
+            {
+                ContainerPath = "/dumps",
+                SourceVolume = "dumps",
+                ReadOnly = false
             });
 
             return task;
